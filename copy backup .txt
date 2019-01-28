@@ -1,0 +1,99 @@
+from flask import Flask,render_template,request,flash,redirect,url_for,session
+from wtforms import Form,StringField,FileField,validators,TimeField,DateField,IntegerField
+from flask_uploads import UploadSet,configure_uploads,IMAGES
+from flask_mysqldb import MySQL
+import os
+
+
+x=0
+app = Flask(__name__)
+#Config MySQL
+app.config['MYSQL_HOST']='localhost'
+app.config['MYSQL_USER']='root'
+app.config['MYSQL_DB']='users'
+app.config['MYSQL_CURSORCLASS']='DictCursor'
+#init SQL
+mysql=MySQL(app)
+
+photos=UploadSet('photos',IMAGES)
+app.config['UPLOADED_PHOTOS_DEST'] = 'static'
+configure_uploads(app, photos)
+
+@app.route('/')
+@app.route('/<user>')
+def user(user=None):
+    return render_template("Homepage.html" ,user=user)
+
+class CreateTournament(Form):
+
+    Tournament_Name = StringField("Tournament Name", [validators.Length(min=4,max=50)])
+    Time1 = TimeField("Time")
+    Time2 = TimeField("Time")
+    Date = DateField("Date", format='%d/%m/%Y')
+    Place = StringField("Place", [validators.Length(min=1,max=50)])
+    Betting_amount = IntegerField("Entry Amount($)")
+
+
+@app.route('/create',methods=["GET","POST"])
+def create():
+    form=CreateTournament(request.form)
+    if request.method=="POST" and form.validate() and 'photo' in request.files:
+        name=request.form['Tournament_Name']
+        Time1=request.form['Time1']
+        Time2=request.form['Time2']
+        Date=request.form['Date']
+        Place=request.form['Place']
+        Betting_amount=request.form['Betting_amount']
+
+        global x
+        x=x+1
+
+        session['Tournament_Name']=name
+        session['Time1']=Time1
+        session['Time2']=Time2
+        session['Date']=Date
+        session['Place']=Place
+        session['Betting_Amount']=Betting_amount
+        session['count']=x
+
+
+        filename = photos.save(request.files['photo'])
+        session['filename']=filename
+
+
+        #SQl
+        Tournament_name=form.Tournament_Name.data
+        Time1=form.Time1.data
+        Time2=form.Time2.data
+        Date=form.Date.data
+
+        #create cursor
+        cur = mysql.connection.cursor()
+
+        cur.execute("INSERT INTO user(Tournament_name,Time1,Time2,Date) VALUES(%s,%d,%d,%s),(Tournament_name,Time1,Time2,Date)")
+
+        #commit to db
+        mysql.connection.commit()
+
+        #close connection
+        cur.close()
+
+
+
+        flash("The tournament have been created! ", "success")
+        return redirect(url_for('find'))
+    return render_template('createtournament.html',form=form)
+
+@app.route('/JoinTournament')
+def index():
+    return render_template("jointournament.html")
+
+@app.route('/findtournament',methods=["GET","POST"])
+def find():
+    session['count']=x
+    return render_template('findtournament.html')
+
+
+if __name__=="__main__":
+    app.secret_key="secret123"
+    app.run(debug=True)
